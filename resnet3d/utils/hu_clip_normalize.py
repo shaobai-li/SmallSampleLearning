@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import nrrd
 import numpy as np
 import sys
