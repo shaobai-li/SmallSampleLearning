@@ -3,9 +3,9 @@ import argparse
 import torch
 from torch.utils.data import DataLoader
 
-from ssl.data.dataset import NRRDDataset
-from ssl.models.model import AE_3D
-from ssl.models.loss import L1ReconstructionLoss
+from train_ssl.data.dataset import NRRDDataset
+from train_ssl.models.model import AE_3D
+from train_ssl.models.loss import L1ReconstructionLoss
 
 
 def train(args):
