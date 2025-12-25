@@ -11,7 +11,7 @@ if __name__ == "__main__":
     parser.add_argument('image_nrrd', type=str, help='Input image NRRD file path')
     parser.add_argument('mask_nrrd', type=str, help='Input mask NRRD file path')
     parser.add_argument('bbox_size', type=str, help='Bounding box size in format "x,y,z" (e.g., "64,64,64")')
-    parser.add_argument('output_nrrd', type=str, help='Output NRRD file path')
+    parser.add_argument('output_dir', type=str, help='Output directory path')
     
     args = parser.parse_args()
     
@@ -23,9 +23,7 @@ if __name__ == "__main__":
         print(f"Error: Mask file does not exist: {args.mask_nrrd}")
         sys.exit(1)
     
-    output_dir = os.path.dirname(args.output_nrrd)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
     
     try:
         bbox_x, bbox_y, bbox_z = map(int, args.bbox_size.split(','))
@@ -78,8 +76,11 @@ if __name__ == "__main__":
         
         cropped_image = masked_image[z_min:z_max, y_min:y_max, x_min:x_max]
         
-        nrrd.write(args.output_nrrd, cropped_image, image_header)
-        print(f"Saved to: {args.output_nrrd}")
+        filename = os.path.basename(args.image_nrrd)
+        output_path = os.path.join(args.output_dir, filename)
+        
+        nrrd.write(output_path, cropped_image, image_header)
+        print(f"Saved to: {output_path}")
         
     except Exception as e:
         print(f"Error: {e}")
