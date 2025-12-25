@@ -2,23 +2,17 @@ import os
 import pandas as pd
 import nrrd
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 
 class NRRDDataset(Dataset):
-    """
-    Dataset for loading NRRD files for AE_3D training.
-    """
+    def __init__(self, csv_path: str, nrrd_dir: str, bin_factor: int = 1):
 
-    def __init__(self, csv_path: str, nrrd_dir: str):
-        """
-        Args:
-            csv_path: Path to CSV file with patient_id column.
-            nrrd_dir: Directory containing {patient_id}.nrrd files.
-        """
         df = pd.read_csv(csv_path)
         self.patient_ids = df["patient_id"].tolist()
         self.nrrd_dir = nrrd_dir
+        self.bin_factor = bin_factor
 
     def __len__(self):
         return len(self.patient_ids)
@@ -30,6 +24,12 @@ class NRRDDataset(Dataset):
         data, _ = nrrd.read(nrrd_path)
         # [D, H, W] -> [1, D, H, W]
         tensor = torch.from_numpy(data).float().unsqueeze(0)
+
+        # Binning
+        if self.bin_factor > 1:
+            tensor = tensor.unsqueeze(0)  # [1, 1, D, H, W]
+            tensor = F.avg_pool3d(tensor, kernel_size=self.bin_factor)
+            tensor = tensor.squeeze(0)  # [1, D', H', W']
 
         return tensor
 

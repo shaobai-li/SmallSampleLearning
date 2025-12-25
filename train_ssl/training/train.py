@@ -13,7 +13,7 @@ def train(args):
     print(f"Using device: {device}")
 
     # Dataset & DataLoader
-    dataset = NRRDDataset(args.csv_path, args.nrrd_dir)
+    dataset = NRRDDataset(args.csv_path, args.nrrd_dir, bin_factor=args.bin_factor)
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -71,6 +71,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--bin_factor", type=int, default=2, help="Binning factor for downsampling")
     parser.add_argument("--save_interval", type=int, default=10)
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
 
