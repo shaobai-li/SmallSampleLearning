@@ -1,4 +1,3 @@
-import os
 import argparse
 import torch
 from torch.utils.data import DataLoader
@@ -6,9 +5,11 @@ from torch.utils.data import DataLoader
 from datasets.dataset import NRRDDataset
 from models.model import AE_3D
 from losses.loss import L1ReconstructionLoss
+from trainer.trainer import Trainer
 
 
 def train(args):
+    """组装一切 + 启动训练"""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -28,39 +29,18 @@ def train(args):
     criterion = L1ReconstructionLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
-    # Training loop
-    for epoch in range(args.epochs):
-        model.train()
-        total_loss = 0.0
+    # Trainer
+    trainer = Trainer(
+        model=model,
+        criterion=criterion,
+        optimizer=optimizer,
+        device=device,
+        checkpoint_dir=args.checkpoint_dir,
+        save_interval=args.save_interval,
+    )
 
-        for batch_idx, x in enumerate(dataloader):
-            x = x.to(device)
-
-            recon = model(x)
-            loss = criterion(recon, x)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item()
-
-            print(f"Epoch [{epoch+1}/{args.epochs}] Batch [{batch_idx+1}/{len(dataloader)}] Loss: {loss.item():.6f}")
-
-        avg_loss = total_loss / len(dataloader)
-        print(f"Epoch [{epoch+1}/{args.epochs}] Avg Loss: {avg_loss:.6f}")
-
-        # Save checkpoint
-        if (epoch + 1) % args.save_interval == 0:
-            os.makedirs(args.checkpoint_dir, exist_ok=True)
-            ckpt_path = os.path.join(args.checkpoint_dir, f"ae3d_epoch{epoch+1}.pt")
-            torch.save({
-                "epoch": epoch + 1,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": avg_loss,
-            }, ckpt_path)
-            print(f"Saved checkpoint: {ckpt_path}")
+    # 启动训练
+    trainer.fit(dataloader, args.epochs)
 
 
 def main():
@@ -81,4 +61,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
