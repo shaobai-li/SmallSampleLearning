@@ -1,8 +1,8 @@
 # AE_3D 自监督训练配置
 
 data:
-  csv_path: datasets/train_ssl.csv
-  nrrd_dir: /path/to/nrrd  # 修改为你的 NRRD 文件目录
+  csv_path: data/train_ssl.csv
+  nrrd_dir: /data/res/res3d/inbox/02_masked/  # 修改为你的 NRRD 文件目录
   bin_factor: 2
 
 model:
@@ -10,7 +10,7 @@ model:
 
 training:
   batch_size: 4
-  epochs: 100
+  epochs: 50
   lr: 1e-4
   num_workers: 4
 
