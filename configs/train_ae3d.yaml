@@ -1,5 +1,3 @@
-# AE_3D 自监督训练配置
-
 data:
   csv_path: data/train_ssl.csv
   nrrd_dir: /data/res/res3d/inbox/02_masked/  # 修改为你的 NRRD 文件目录

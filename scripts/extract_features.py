@@ -1,26 +1,31 @@
-import os
 import argparse
 import torch
 import pandas as pd
+from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from train_ssl.data.dataset import NRRDDataset
-from train_ssl.models.model import AE_3D
+from datasets.dataset import NRRDDataset
+from models.model import AE_3D
 
 
-def extract_features(args):
+def extract_features(cfg):
+    """加载模型并提取特征"""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # Load model
     model = AE_3D().to(device)
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+    checkpoint = torch.load(cfg.model.checkpoint, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
-    print(f"Loaded checkpoint: {args.checkpoint}")
+    print(f"Loaded checkpoint: {cfg.model.checkpoint}")
 
     # Load dataset
-    dataset = NRRDDataset(args.csv_path, args.nrrd_dir, bin_factor=args.bin_factor)
+    dataset = NRRDDataset(
+        cfg.data.csv_path,
+        cfg.data.nrrd_dir,
+        bin_factor=cfg.data.bin_factor,
+    )
     print(f"Loaded {len(dataset)} samples")
 
     # Extract features
@@ -40,22 +45,21 @@ def extract_features(args):
     df.insert(0, "patient_id", patient_ids)
 
     # Save
-    df.to_csv(args.output, index=False)
-    print(f"Saved features to: {args.output}")
+    df.to_csv(cfg.output.path, index=False)
+    print(f"Saved features to: {cfg.output.path}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Extract features using trained AE_3D")
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to .pt checkpoint")
-    parser.add_argument("--csv_path", type=str, required=True, help="Path to train_ssl.csv")
-    parser.add_argument("--nrrd_dir", type=str, required=True, help="Directory with NRRD files")
-    parser.add_argument("--bin_factor", type=int, default=2, help="Binning factor (should match training)")
-    parser.add_argument("--output", type=str, default="features.csv", help="Output CSV path")
-
+    parser.add_argument("--config", type=str, required=True, help="Path to config YAML file")
     args = parser.parse_args()
-    extract_features(args)
+
+    # 加载配置
+    cfg = OmegaConf.load(args.config)
+    print(OmegaConf.to_yaml(cfg))
+
+    extract_features(cfg)
 
 
 if __name__ == "__main__":
     main()
-
