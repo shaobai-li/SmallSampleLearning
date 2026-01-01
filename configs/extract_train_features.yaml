@@ -1,0 +1,14 @@
+# 训练集特征提取配置
+
+data:
+  csv_path: data/train_ssl.csv
+  nrrd_dir: /data/res/res3d/inbox/02_masked/
+  bin_factor: 2
+
+model:
+  name: AE_3D
+  checkpoint: checkpoints/ae3d_epoch50.pt
+
+output:
+  path: outputs/features/train_features.csv
+
