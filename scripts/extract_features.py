@@ -1,3 +1,4 @@
+import os
 import argparse
 import torch
 import pandas as pd
@@ -44,7 +45,10 @@ def extract_features(cfg):
     df = pd.DataFrame(features, columns=feat_cols)
     df.insert(0, "patient_id", patient_ids)
 
-    # Save
+    # Save (自动创建目录)
+    output_dir = os.path.dirname(cfg.output.path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     df.to_csv(cfg.output.path, index=False)
     print(f"Saved features to: {cfg.output.path}")
 
