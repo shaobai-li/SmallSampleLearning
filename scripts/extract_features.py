@@ -40,7 +40,7 @@ def extract_features(cfg):
             features.append(feat.cpu().numpy().flatten())
 
     # Build DataFrame
-    feat_cols = [f"feat_{i}" for i in range(256)]
+    feat_cols = [f"feature_{i}" for i in range(256)]
     df = pd.DataFrame(features, columns=feat_cols)
     df.insert(0, "patient_id", patient_ids)
 
