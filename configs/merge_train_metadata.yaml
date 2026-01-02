@@ -1,0 +1,11 @@
+data:
+  metadata_path: data/original/train.csv       # 原始元数据 CSV
+  features_path: outputs/features/train_features.csv  # AE3D 特征 CSV
+
+output:
+  path: outputs/train_merged.csv
+
+merge:
+  drop_old: 1                   # 删除旧特征数量 (0=不删)
+  old_prefix: "feature_"        # 旧特征前缀
+
