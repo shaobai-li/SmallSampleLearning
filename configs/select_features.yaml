@@ -1,0 +1,7 @@
+data:
+  input_path: outputs/train_merged.csv
+
+output:
+  path_PFS: outputs/select_features/feature_selection_all_PFS
+  path_OS: outputs/select_features/feature_selection_all_OS
+
