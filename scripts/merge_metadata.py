@@ -19,10 +19,9 @@ def merge_metadata(cfg):
     print(f"元数据: {meta_df.shape}, 特征: {feat_df.shape}")
 
     # 删除旧特征列（如果指定）
-    if cfg.merge.drop_old > 0:
-        old_cols = [f"{cfg.merge.old_prefix}{i}" for i in range(cfg.merge.drop_old)]
-        meta_df = meta_df.drop(columns=[c for c in old_cols if c in meta_df.columns])
-        print(f"删除旧特征后: {meta_df.shape}")
+    old_cols = [c for c in meta_df.columns if c.startswith(cfg.merge.old_prefix)]
+    meta_df = meta_df.drop(columns=[c for c in old_cols if c in meta_df.columns])
+    print(f"删除旧特征后: {meta_df.shape}")
 
     # 合并
     merged = meta_df.merge(feat_df, on="patient_id", how="inner")
