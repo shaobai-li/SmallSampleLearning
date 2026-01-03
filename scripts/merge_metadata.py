@@ -20,6 +20,7 @@ def merge_metadata(cfg):
 
     # 删除旧特征列（如果指定）
     old_cols = [c for c in meta_df.columns if c.startswith(cfg.merge.old_prefix)]
+    print(f"旧特征数: {len(old_cols)}")
     meta_df = meta_df.drop(columns=[c for c in old_cols if c in meta_df.columns])
     print(f"删除旧特征后: {meta_df.shape}")
 
