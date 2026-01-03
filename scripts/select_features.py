@@ -624,11 +624,18 @@ def screen_and_select_for_endpoint(
 # ------------------ 示例主程序 ------------------
 
 if __name__ == "__main__":
-    # 1) 读取 2.5D radiomics 特征
-    df = pd.read_csv(
-        r"D:\20251104\train\data\train.csv",
-        encoding="utf-8"
-    )
+    import argparse
+    import yaml
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", "-c", type=str, default="configs/select_features.yaml")
+    args = parser.parse_args()
+
+    with open(args.config, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    # 1) 读取数据
+    df = pd.read_csv(cfg["data"]["input_path"], encoding="utf-8")
 
     # 2) 确保事件列是 0/1 int
     for c in ["PFS_event", "OS_event"]:
@@ -653,10 +660,10 @@ if __name__ == "__main__":
         event_col="PFS_event",
         feature_cols=feature_cols,
         endpoint="PFS",
-        univar_alpha=0.05,               
+        univar_alpha=0.05,
         alphas=np.logspace(-3, 2, 40),
         save=True,
-        save_root="./feature_selection_all_PFS"
+        save_root=cfg["output"]["path_PFS"]
     )
 
     # OS：同样 LASSO-CV
@@ -666,12 +673,11 @@ if __name__ == "__main__":
         event_col="OS_event",
         feature_cols=feature_cols,
         endpoint="OS",
-        univar_alpha=0.05,                
+        univar_alpha=0.05,
         alphas=np.logspace(-3, 2, 40),
         save=True,
-        save_root="./feature_selection_all_OS"
+        save_root=cfg["output"]["path_OS"]
     )
-
 
     print("PFS 结果保存目录：", out_pfs.save_dir)
     print("OS  结果保存目录：", out_os.save_dir)
