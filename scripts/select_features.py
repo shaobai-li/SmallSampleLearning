@@ -647,11 +647,12 @@ if __name__ == "__main__":
         "PFS", "PFS_event", "OS", "OS_event",
         "patient_id", "case_id", "ID", "StudyInstanceUID"
     }
+    feature_prefix = cfg["data"].get("feature_prefix", "")
     feature_cols = [
         c for c in df.select_dtypes(include=[np.number]).columns
-        if c not in exclude
+        if c not in exclude and c.startswith(feature_prefix)
     ]
-    print("特征数 =", len(feature_cols))
+    print(f"特征前缀 = '{feature_prefix}', 特征数 = {len(feature_cols)}")
 
     # PFS：LASSO-CV
     out_pfs = screen_and_select_for_endpoint(
