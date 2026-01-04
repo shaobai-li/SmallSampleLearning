@@ -6,13 +6,13 @@
 # --- 路径配置 ---
 paths:
   # 数据目录（包含 train/val/test CSV）
-  data_dir: "D:/20251104/train/PFS/radiomic_ct/splits"
-  train_file: "train.csv"
-  val_file: "val.csv"
-  test_file: "test.csv"
+  data_dir: "outputs/"
+  train_file: "train_merged.csv"
+  val_file: "val_merged.csv"
+  test_file: "test_merged.csv"
   
   # 特征文件目录
-  feature_dir: "D:/20251104/train/PFS"
+  feature_dir: "data/features"
 
 # --- 生存分析配置 ---
 survival:
