@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-Baseline Lite: RSF + EN-Cox
+Ensemble Stacking for Survival Analysis (YAML-based)
+- RSF + EN-Cox base learners
 - Single-branch meta: VAL-based robust weighting (cap)
 - Fixed evaluation times: [12, 24] months (clipped to train max)
 - Safe OOF selection + prune + one-pass fusion
 - Multi-seed summary + BCa CI (fallbacks on small/degenerate samples)
+
+Usage:
+    python ensemble_pfs_stacking.py --config path/to/config.yaml
 """
 
 from __future__ import annotations
+import argparse
+import yaml
 from dataclasses import dataclass, asdict, is_dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 
 import json, warnings, numpy as np, pandas as pd
 from sklearn.base import clone, BaseEstimator, TransformerMixin
@@ -26,12 +32,29 @@ from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc
 from sksurv.linear_model import CoxnetSurvivalAnalysis
 from sksurv.ensemble import RandomSurvivalForest
 
-from sksurv.util import Surv
-import numpy as np, pandas as pd
-from pathlib import Path
-
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 np.seterr(all="ignore")
+
+
+# ====== 配置加载 ======
+def load_config(config_path: str) -> Dict[str, Any]:
+    """加载 YAML 配置文件"""
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    return cfg
+
+
+def parse_seed_range(seed_cfg) -> List[int]:
+    """解析 seed 配置，支持 list 或 range 格式"""
+    if isinstance(seed_cfg, list):
+        return seed_cfg
+    elif isinstance(seed_cfg, dict):
+        start = seed_cfg.get("start", 10)
+        stop = seed_cfg.get("stop", 60)
+        step = seed_cfg.get("step", 1)
+        return list(range(start, stop, step))
+    else:
+        return [seed_cfg]
 
 
 # ====== 工具 ======
@@ -39,13 +62,16 @@ def normalize_seed(s) -> int:
     if isinstance(s, (int, np.integer)): return int(s)
     return 42
 
+
 def safe_filename(s: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in s)
+
 
 def to_structured_y(df: pd.DataFrame, time_col: str, event_col: str):
     ev = df[event_col].astype(bool).values
     tt = df[time_col].astype(float).values
     return Surv.from_arrays(event=ev, time=tt)
+
 
 def preprocess_features(df: pd.DataFrame, drop_na_rate=0.40) -> pd.DataFrame:
     x = df.copy().replace([np.inf, -np.inf], np.nan)
@@ -56,12 +82,14 @@ def preprocess_features(df: pd.DataFrame, drop_na_rate=0.40) -> pd.DataFrame:
     x = x.drop(columns=zero[zero == 0].index, errors="ignore")
     return x
 
+
 def ensure_columns(df_src: pd.DataFrame, df_ref: pd.DataFrame) -> pd.DataFrame:
     need = [c for c in df_ref.columns if c not in df_src.columns]
     if need:
         df_src = df_src.copy()
         for c in need: df_src[c] = np.nan
     return df_src
+
 
 def safe_feature_matrix(df: pd.DataFrame, cols: List[str]) -> np.ndarray:
     cols = list(cols)
@@ -70,6 +98,7 @@ def safe_feature_matrix(df: pd.DataFrame, cols: List[str]) -> np.ndarray:
         df = df.copy()
         for c in missing: df[c] = np.nan
     return df[cols].to_numpy(dtype=float)
+
 
 class AdaptivePCA(BaseEstimator, TransformerMixin):
     """自适应 PCA：n_comp = min(k, n_feat-1, n_samp-1)，>=1"""
@@ -98,6 +127,7 @@ def _scores_of(df, res):
     P = np.vstack(P)
     w = np.asarray(res.meta["weights"], float); w = w / (w.sum() + 1e-12)
     return (w[:, None] * P).sum(axis=0)
+
 
 def save_run_outputs(res, df_train, df_val, df_test, time_col, event_col):
     """
@@ -134,6 +164,7 @@ def save_run_outputs(res, df_train, df_val, df_test, time_col, event_col):
 
     print(f"[DUMP] train/val/test scores + y + threshold saved to: {outdir}")
 
+
 # ====== 评估（固定 tAUC@12/@24）======
 def fixed_times_from_train(df_train: pd.DataFrame, time_col: str) -> np.ndarray:
     obs = df_train[time_col].astype(float).values
@@ -156,6 +187,7 @@ def fixed_times_from_train(df_train: pd.DataFrame, time_col: str) -> np.ndarray:
         t = np.array(sorted({t0, t1}), dtype=float)
 
     return t
+
 
 def eval_scores(df_eval, time_col, event_col, scores, times_auc, y_train_struct=None, tag="EVAL"):
     y_eval = to_structured_y(df_eval, time_col, event_col)
@@ -193,6 +225,7 @@ def eval_scores(df_eval, time_col, event_col, scores, times_auc, y_train_struct=
     print(f"[{tag}] C-index={c:.3f}, tAUC@12={auc12:.3f}, tAUC@24={auc24:.3f}")
     return c, auc12, auc24
 
+
 # ====== 候选器 ======
 def candidates(random_state=42) -> Dict[str, Pipeline]:
     r = normalize_seed(random_state); C: Dict[str, Pipeline] = {}
@@ -224,11 +257,13 @@ def candidates(random_state=42) -> Dict[str, Pipeline]:
         ])
     return C
 
+
 # ====== OOF + 单模最优 ======
 def kfold_indices(n, n_splits=5, seed=42):
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=normalize_seed(seed))
     for tr, va in kf.split(np.arange(n)):
         yield tr, va
+
 
 @dataclass
 class BaseResult:
@@ -237,6 +272,7 @@ class BaseResult:
     pipe: Pipeline
     oof: np.ndarray
     ci: float
+
 
 def oof_for_pipeline(pipe: Pipeline, X: pd.DataFrame, y_struct, feats: List[str],
                      n_splits=5, random_state=42) -> Tuple[np.ndarray, float]:
@@ -255,6 +291,7 @@ def oof_for_pipeline(pipe: Pipeline, X: pd.DataFrame, y_struct, feats: List[str]
     ci = float(concordance_index_censored(y_struct["event"], y_struct["time"], oof)[0])
     return oof, ci
 
+
 def fit_single_modal_best(X: pd.DataFrame, y_struct, feats: List[str],
                           n_splits=5, seed=42) -> Optional[BaseResult]:
     best = None
@@ -264,6 +301,7 @@ def fit_single_modal_best(X: pd.DataFrame, y_struct, feats: List[str],
         if (best is None) or (ci > best.ci):
             best = BaseResult(name=nm, feats=list(feats), pipe=clone(pipe), oof=oof, ci=float(ci))
     return best
+
 
 # ====== 剪枝 + VAL 稳健加权 ======
 def prune_modalities(ci_map: Dict[str, float], threshold=0.62, min_keep=2, top_k=2) -> List[str]:
@@ -276,6 +314,7 @@ def prune_modalities(ci_map: Dict[str, float], threshold=0.62, min_keep=2, top_k
     print(f"[PRUNE] keep={kept} | thr={threshold} | min={min_keep} | top_k={top_k}")
     return kept
 
+
 def robust_weights(val_cis: List[float], oof_cis: List[float], tau=0.06, cap=0.7) -> np.ndarray:
     s_val = np.clip(np.asarray(val_cis)-0.5, 0, None) + 1e-4
     s_oof = np.clip(np.asarray(oof_cis)-0.5, 0, None) + 1e-4
@@ -283,6 +322,7 @@ def robust_weights(val_cis: List[float], oof_cis: List[float], tau=0.06, cap=0.7
     w = np.exp(z - z.max()); w = w / (w.sum() + 1e-12)
     w = np.minimum(w, cap); w = w / (w.sum() + 1e-12)
     return w
+
 
 @dataclass
 class StackResult:
@@ -292,6 +332,7 @@ class StackResult:
     times_auc: np.ndarray
     save_dir: str
     keep_names: List[str]
+
 
 def train_stacking(df: pd.DataFrame, time_col: str, event_col: str,
                    modality_feats: Dict[str,List[str]], endpoint: str,
@@ -343,6 +384,7 @@ def train_stacking(df: pd.DataFrame, time_col: str, event_col: str,
     return StackResult(endpoint=endpoint, base_models=best_by_modal, meta=meta,
                        times_auc=times, save_dir=str(outdir), keep_names=names)
 
+
 def predict_stack(df_new: pd.DataFrame, res: StackResult) -> np.ndarray:
     X = preprocess_features(df_new)
     P = []
@@ -353,6 +395,7 @@ def predict_stack(df_new: pd.DataFrame, res: StackResult) -> np.ndarray:
     P = np.vstack(P) if len(P)>0 else np.zeros((0, len(df_new)))
     w = np.asarray(res.meta["weights"], float); w = w / (w.sum() + 1e-12)
     return (w[:,None] * P).sum(axis=0)
+
 
 # ====== 用 VAL 单模 C-index 重建权重（推荐）======
 def rebuild_weights_with_val(df_val: pd.DataFrame, time_col, event_col, res: StackResult,
@@ -370,11 +413,13 @@ def rebuild_weights_with_val(df_val: pd.DataFrame, time_col, event_col, res: Sta
         Path(res.save_dir)/"meta_weights_VAL_based.csv", index=False)
     print(f"[META] Rebuilt with VAL: names={res.keep_names}, weights={np.round(w,3)}")
 
+
 # ====== Multi-seed + BCa ======
 def _med_iqr(arr: List[float]):
     x = np.asarray([v for v in arr if np.isfinite(v)], float)
     if x.size == 0: return float("nan"), (float("nan"), float("nan"))
     return float(np.median(x)), (float(np.percentile(x,25)), float(np.percentile(x,75)))
+
 
 def _bca_ci(arr: List[float], n_boot=2000, alpha=0.05) -> Tuple[float,float]:
     rng = np.random.default_rng(12345)
@@ -427,6 +472,7 @@ def _bca_ci(arr: List[float], n_boot=2000, alpha=0.05) -> Tuple[float,float]:
     boots = np.median(x[idx], axis=1)
     return float(np.quantile(boots, adj_lo)), float(np.quantile(boots, adj_hi))
 
+
 def summarize_many(board: pd.DataFrame, title="[MEDIAN±IQR + 95% BCa CI]"):
     def line(name, arr):
         med, (q1,q3) = _med_iqr(arr); lo, hi = _bca_ci(arr, 2000, 0.05)
@@ -439,167 +485,224 @@ def summarize_many(board: pd.DataFrame, title="[MEDIAN±IQR + 95% BCa CI]"):
     line("TEST tAUC@12",  board["test_auc12"].tolist())
     line("TEST tAUC@24",  board["test_auc24"].tolist())
 
-# ============================================================
-# 主入口：比较 3 个结构
-#   1) imaging-only      （原始基线）
-#   2) img+clin (early)  （前融合：临床拼进每个影像分支）
-#   3) hybrid (late)     （后融合：影像分支 + 纯临床分支）
-# ============================================================
-if __name__ == "__main__":
-    # --- 路径 ---
-    ROOT = Path(r"D:\20251104\train\PFS\radiomic_ct\splits")
-    df      = pd.read_csv(ROOT/"train.csv")
-    df_val  = pd.read_csv(ROOT/"val.csv")
-    df_test = pd.read_csv(ROOT/"test.csv")
 
-    # --- 特征列 ---
-    FEAT_DIR = Path(r"D:\20251104\train\PFS")
-    feat_rad3d   = pd.read_csv(FEAT_DIR/"selected_features_rad3d.csv")["feature"].tolist()
-    feat_rad2p5d = pd.read_csv(FEAT_DIR/"selected_features_rad2p5d.csv")["feature"].tolist()
-    feat_dl3d    = pd.read_csv(FEAT_DIR/"selected_features_dl3d.csv")["feature"].tolist()
-    feat_dl2p5d  = pd.read_csv(FEAT_DIR/"selected_features_dl2p5d.csv")["feature"].tolist()
+# ====== 特征加载与融合 ======
+def load_features_from_config(cfg: Dict[str, Any]) -> Dict[str, List[str]]:
+    """从配置文件加载特征列表"""
+    feat_dir = Path(cfg["paths"]["feature_dir"])
+    features = {}
+    
+    for name, feat_cfg in cfg["features"].items():
+        if not feat_cfg.get("enabled", True):
+            continue
+        feat_file = feat_dir / feat_cfg["file"]
+        if feat_file.exists():
+            features[name] = pd.read_csv(feat_file)["feature"].tolist()
+        else:
+            print(f"[WARN] Feature file not found: {feat_file}")
+    
+    return features
 
-    # --- 读临床/病理特征列（已数值化）---
-    clin_feats = pd.read_csv(FEAT_DIR / "selected_features_clinpath.csv")["feature"].tolist()
 
-    # 小工具：影像特征 + 临床特征 前融合
+def build_modality_dict(cfg: Dict[str, Any], features: Dict[str, List[str]]) -> Dict[str, Dict[str, List[str]]]:
+    """根据配置构建不同融合策略的模态字典"""
+    modalities = {}
+    
+    # 获取临床特征（如果存在）
+    clin_feats = features.get("clinpath", [])
+    
+    # 前融合辅助函数
     def fuse_with_clin(feats_img, feats_clin):
-        # 用 dict.fromkeys 去重并保持顺序
         return list(dict.fromkeys(list(feats_img) + list(feats_clin)))
+    
+    for exp_name, exp_cfg in cfg["experiments"].items():
+        if not exp_cfg.get("enabled", True):
+            continue
+        
+        fusion_type = exp_cfg.get("fusion_type", "none")
+        modality_names = exp_cfg.get("modalities", [])
+        
+        mod_dict = {}
+        for mod_name in modality_names:
+            if mod_name not in features:
+                print(f"[WARN] Modality '{mod_name}' not found in features, skipping.")
+                continue
+            
+            if fusion_type == "early" and mod_name != "clinpath":
+                # 前融合：影像特征 + 临床特征
+                mod_dict[mod_name] = fuse_with_clin(features[mod_name], clin_feats)
+            else:
+                # none 或 late：直接使用原始特征
+                mod_dict[mod_name] = features[mod_name]
+        
+        modalities[exp_name] = {
+            "modality": mod_dict,
+            "save_subdir": exp_cfg.get("save_subdir", f"stacking_runs_{exp_name}"),
+            "fusion_type": fusion_type
+        }
+    
+    return modalities
 
-    # ========== 1) Imaging-only 模态定义（原始基线） ==========
-    modality_img_only = {
-        "rad3D":   feat_rad3d,
-        "rad2p5D": feat_rad2p5d,
-        #"dl3D":    feat_dl3d,
-        #"dl2p5D":  feat_dl2p5d,
-    }
 
-    # ========== 2) img+clin (early fusion) 模态定义 ==========
-    modality_img_clin_early = {
-        "rad3D":   fuse_with_clin(feat_rad3d,   clin_feats),
-        "rad2p5D": fuse_with_clin(feat_rad2p5d, clin_feats),
-        #"dl3D":    fuse_with_clin(feat_dl3d,    clin_feats),
-        #"dl2p5D":  fuse_with_clin(feat_dl2p5d,  clin_feats),
-    }
+# ====== 实验运行器 ======
+def run_experiment(label: str, modality: Dict[str, List[str]], save_subdir: str,
+                   df: pd.DataFrame, df_val: pd.DataFrame, df_test: pd.DataFrame,
+                   time_col: str, event_col: str, y_tr,
+                   feat_dir: Path, cfg: Dict[str, Any]):
+    """
+    运行单个实验（单次 + multi-seed）
+    
+    Args:
+        label:       实验标签（如 'img', 'img_clin_early', 'hybrid'）
+        modality:    传给 train_stacking 的模态字典
+        save_subdir: 结果保存的子目录名
+        df, df_val, df_test: 训练/验证/测试数据
+        time_col, event_col: 生存时间和事件列名
+        y_tr:        训练集结构化标签
+        feat_dir:    特征目录
+        cfg:         完整配置
+    """
+    print(f"\n\n========== RUN EXPERIMENT: {label} ==========")
+    save_root = feat_dir / save_subdir
+    
+    # 获取配置参数
+    model_cfg = cfg.get("model", {})
+    n_splits = model_cfg.get("n_splits", 5)
+    prune_threshold = model_cfg.get("prune_threshold", 0.62)
+    prune_min_keep = model_cfg.get("prune_min_keep", 2)
+    prune_top_k = model_cfg.get("prune_top_k", 2)
+    tau = model_cfg.get("tau", 0.04)
+    cap = model_cfg.get("cap", 0.7)
+    
+    seed_cfg = cfg.get("seeds", {})
+    seed_main = seed_cfg.get("main", 42)
+    seeds_multi = parse_seed_range(seed_cfg.get("multi", {"start": 10, "stop": 60, "step": 1}))
+    
+    # 1) 单次运行（主模型）
+    res = train_stacking(
+        df, time_col, event_col, modality, endpoint=cfg["survival"]["endpoint"],
+        n_splits=n_splits,
+        save_root=save_root,
+        prune_threshold=prune_threshold, prune_min_keep=prune_min_keep, prune_top_k=prune_top_k,
+        seed=seed_main
+    )
+    # 用 VAL 重建 stacking 权重
+    rebuild_weights_with_val(df_val, time_col, event_col, res, tau=tau, cap=cap)
 
-    # ========== 3) hybrid (late fusion) 模态定义 ==========
-    #   - 四个纯影像分支 + 一个纯临床分支
-    modality_hybrid = {
-        "rad3D":    feat_rad3d,
-        "rad2p5D":  feat_rad2p5d,
-        #"dl3D":     feat_dl3d,
-        #"dl2p5D":   feat_dl2p5d,
-        "clinpath": clin_feats,   # 纯临床/病理
-    }
+    # 预测 + 评估
+    sc_val  = predict_stack(df_val,  res)
+    sc_test = predict_stack(df_test, res)
 
-    # --- 列对齐（防止 val/test 少列）---
+    eval_scores(df_val,  time_col, event_col, sc_val,
+                res.times_auc, y_tr, tag=f"VAL[{label}, seed={seed_main}]")
+    eval_scores(df_test, time_col, event_col, sc_test,
+                res.times_auc, y_tr, tag=f"TEST[{label}, seed={seed_main}]")
+
+    # 2) Multi-seed 稳健性分析
+    rows = []
+    for sd in seeds_multi:
+        print(f"\n--- Multi-seed run: label={label}, seed={sd} ---")
+        r = train_stacking(
+            df, time_col, event_col, modality, endpoint=cfg["survival"]["endpoint"],
+            n_splits=n_splits,
+            save_root=save_root,
+            prune_threshold=prune_threshold, prune_min_keep=prune_min_keep, prune_top_k=prune_top_k,
+            seed=sd
+        )
+        rebuild_weights_with_val(df_val, time_col, event_col, r, tau=tau, cap=cap)
+        save_run_outputs(r, df, df_val, df_test, time_col=time_col, event_col=event_col)
+
+        s_val  = predict_stack(df_val,  r)
+        s_test = predict_stack(df_test, r)
+
+        c_v, a12_v, a24_v = eval_scores(
+            df_val,  time_col, event_col, s_val,  r.times_auc, y_tr,
+            tag=f"VAL[{label}, seed={sd}]"
+        )
+        c_t, a12_t, a24_t = eval_scores(
+            df_test, time_col, event_col, s_test, r.times_auc, y_tr,
+            tag=f"TEST[{label}, seed={sd}]"
+        )
+
+        rows.append(dict(
+            seed=sd,
+            val_c=c_v,   test_c=c_t,
+            val_auc12=a12_v, val_auc24=a24_v,
+            test_auc12=a12_t, test_auc24=a24_t
+        ))
+
+    board = pd.DataFrame(rows).sort_values("test_c", ascending=False).reset_index(drop=True)
+    print(f"\n[SUMMARY top 10 by TEST C-index]  ({label})")
+    print(board.head(10))
+
+    summarize_many(board, title=f"[{label}] MEDIAN±IQR + 95% BCa CI")
+
+    out_csv = feat_dir / f"{cfg['survival']['endpoint']}_multi_seed_board_{label}.csv"
+    board.to_csv(out_csv, index=False)
+    print(f"\nSaved multi-seed summary to: {out_csv}")
+
+    return res, board
+
+
+# ============================================================
+# 主入口
+# ============================================================
+def main(config_path: str):
+    """主函数，基于 YAML 配置运行实验"""
+    print(f"Loading config from: {config_path}")
+    cfg = load_config(config_path)
+    
+    # --- 路径 ---
+    paths = cfg["paths"]
+    data_dir = Path(paths["data_dir"])
+    feat_dir = Path(paths["feature_dir"])
+    
+    # --- 加载数据 ---
+    df      = pd.read_csv(data_dir / paths["train_file"])
+    df_val  = pd.read_csv(data_dir / paths["val_file"])
+    df_test = pd.read_csv(data_dir / paths["test_file"])
+    
+    # 列对齐（防止 val/test 少列）
     df_val  = ensure_columns(df_val,  df)
     df_test = ensure_columns(df_test, df)
-
-    # 生存标签（训练集）
-    y_tr = to_structured_y(df, "PFS", "PFS_event")
-
-    # ========== 通用封装：跑一个实验（单次 + multi-seed）==========
-    def run_experiment(label: str, modality: dict, save_subdir: str,
-                       seed_main: int = 42, seeds_multi=range(10, 60)):
-        """
-        label:         用于标记输出（如 'img', 'img_clin_early', 'hybrid'）
-        modality:      传给 train_stacking 的模态字典
-        save_subdir:   结果保存的子目录名
-        seed_main:     单次运行的主 seed
-        seeds_multi:   multi-seed 的 seed 列表
-        """
-        print(f"\n\n========== RUN EXPERIMENT: {label} ==========")
-        save_root = FEAT_DIR / save_subdir
-
-        # 1) 单次运行（主模型）
-        res = train_stacking(
-            df, "PFS", "PFS_event", modality, endpoint="PFS",
-            n_splits=5,
-            save_root=save_root,
-            prune_threshold=0.62, prune_min_keep=2, prune_top_k=2,
-            seed=seed_main
+    
+    # --- 生存标签 ---
+    surv_cfg = cfg["survival"]
+    time_col = surv_cfg["time_col"]
+    event_col = surv_cfg["event_col"]
+    y_tr = to_structured_y(df, time_col, event_col)
+    
+    # --- 加载特征 ---
+    features = load_features_from_config(cfg)
+    print(f"Loaded features: {list(features.keys())}")
+    
+    # --- 构建模态字典 ---
+    modalities = build_modality_dict(cfg, features)
+    
+    # --- 依次运行实验 ---
+    results = {}
+    for exp_name, exp_data in modalities.items():
+        res, board = run_experiment(
+            label=exp_name,
+            modality=exp_data["modality"],
+            save_subdir=exp_data["save_subdir"],
+            df=df, df_val=df_val, df_test=df_test,
+            time_col=time_col, event_col=event_col, y_tr=y_tr,
+            feat_dir=feat_dir, cfg=cfg
         )
-        # 用 VAL 重建 stacking 权重
-        rebuild_weights_with_val(df_val, "PFS", "PFS_event", res, tau=0.04, cap=0.7)
+        results[exp_name] = {"result": res, "board": board}
+    
+    print("\n" + "="*60)
+    print("All experiments completed!")
+    print("="*60)
+    
+    return results
 
-        # 预测 + 评估
-        sc_val  = predict_stack(df_val,  res)
-        sc_test = predict_stack(df_test, res)
 
-        eval_scores(df_val,  "PFS", "PFS_event", sc_val,
-                    res.times_auc, y_tr, tag=f"VAL[{label}, seed={seed_main}]")
-        eval_scores(df_test, "PFS", "PFS_event", sc_test,
-                    res.times_auc, y_tr, tag=f"TEST[{label}, seed={seed_main}]")
-
-        # 2) Multi-seed 稳健性分析
-        rows = []
-        for sd in seeds_multi:
-            print(f"\n--- Multi-seed run: label={label}, seed={sd} ---")
-            r = train_stacking(
-                df, "PFS", "PFS_event", modality, endpoint="PFS",
-                n_splits=5,
-                save_root=save_root,
-                prune_threshold=0.62, prune_min_keep=2, prune_top_k=2,
-                seed=sd
-            )
-            rebuild_weights_with_val(df_val, "PFS", "PFS_event", r, tau=0.04, cap=0.7)
-            save_run_outputs(r, df, df_val, df_test,
-                             time_col="PFS", event_col="PFS_event")
-
-            s_val  = predict_stack(df_val,  r)
-            s_test = predict_stack(df_test, r)
-
-            c_v, a12_v, a24_v = eval_scores(
-                df_val,  "PFS", "PFS_event", s_val,  r.times_auc, y_tr,
-                tag=f"VAL[{label}, seed={sd}]"
-            )
-            c_t, a12_t, a24_t = eval_scores(
-                df_test, "PFS", "PFS_event", s_test, r.times_auc, y_tr,
-                tag=f"TEST[{label}, seed={sd}]"
-            )
-
-            rows.append(dict(
-                seed=sd,
-                val_c=c_v,   test_c=c_t,
-                val_auc12=a12_v, val_auc24=a24_v,
-                test_auc12=a12_t, test_auc24=a24_t
-            ))
-
-        board = pd.DataFrame(rows).sort_values("test_c", ascending=False).reset_index(drop=True)
-        print(f"\n[SUMMARY top 10 by TEST C-index]  ({label})")
-        print(board.head(10))
-
-        summarize_many(board, title=f"[{label}] MEDIAN±IQR + 95% BCa CI")
-
-        out_csv = FEAT_DIR / f"PFS_multi_seed_board_{label}.csv"
-        board.to_csv(out_csv, index=False)
-        print(f"\nSaved multi-seed summary to: {out_csv}")
-
-        return res, board
-
-    # ============================================================
-    # 依次运行三种结构（按需注释）
-    # ============================================================
-
-    #1) 纯影像基线：imaging-only
-    res_img, board_img = run_experiment(
-        label="img",
-        modality=modality_img_only,
-        save_subdir="stacking_runs_img"
-    )
-
-    # 2) 前融合：img+clin (early fusion)
-    res_img_clin_early, board_img_clin_early = run_experiment(
-        label="img_clin_early",
-        modality=modality_img_clin_early,
-        save_subdir="stacking_runs_img_clin_early"
-    )
-
-    # 3) 后融合：hybrid（影像分支 + clinpath 分支）
-    res_hybrid, board_hybrid = run_experiment(
-        label="hybrid",
-        modality=modality_hybrid,
-        save_subdir="stacking_runs_hybrid"
-    )
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Ensemble Stacking for Survival Analysis")
+    parser.add_argument("--config", "-c", type=str, required=True,
+                        help="Path to YAML configuration file")
+    args = parser.parse_args()
+    
+    main(args.config)
