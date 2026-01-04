@@ -1,0 +1,94 @@
+# ============================================================
+# Ensemble Stacking for PFS Survival Analysis - Configuration
+# ============================================================
+# Usage: python scripts/ensemble_pfs_stacking.py --config configs/pfs_stacking.yaml
+
+# --- 路径配置 ---
+paths:
+  # 数据目录（包含 train/val/test CSV）
+  data_dir: "D:/20251104/train/PFS/radiomic_ct/splits"
+  train_file: "train.csv"
+  val_file: "val.csv"
+  test_file: "test.csv"
+  
+  # 特征文件目录
+  feature_dir: "D:/20251104/train/PFS"
+
+# --- 生存分析配置 ---
+survival:
+  endpoint: "PFS"           # 终点名称
+  time_col: "PFS"           # 生存时间列名
+  event_col: "PFS_event"    # 事件列名
+
+# --- 特征文件定义 ---
+features:
+  rad3d:
+    file: "selected_features_rad3d.csv"
+    enabled: true
+  rad2p5d:
+    file: "selected_features_rad2p5d.csv"
+    enabled: true
+  dl3d:
+    file: "selected_features_dl3d.csv"
+    enabled: false          # 设为 true 启用
+  dl2p5d:
+    file: "selected_features_dl2p5d.csv"
+    enabled: false          # 设为 true 启用
+  clinpath:
+    file: "selected_features_clinpath.csv"
+    enabled: true
+
+# --- 模型参数 ---
+model:
+  n_splits: 5               # K-Fold 折数
+  prune_threshold: 0.62     # 剪枝阈值
+  prune_min_keep: 2         # 最少保留模态数
+  prune_top_k: 2            # 最多保留模态数
+  tau: 0.04                 # 权重计算温度参数
+  cap: 0.7                  # 权重上限
+
+# --- 随机种子配置 ---
+seeds:
+  main: 42                  # 主实验种子
+  multi:                    # Multi-seed 稳健性分析
+    start: 10
+    stop: 60
+    step: 1
+
+# --- 实验配置 ---
+# 每个实验可以独立启用/禁用
+experiments:
+  # 1) 纯影像基线
+  img:
+    enabled: true
+    fusion_type: "none"     # none: 不融合临床
+    modalities:
+      - rad3d
+      - rad2p5d
+      # - dl3d              # 取消注释启用
+      # - dl2p5d
+    save_subdir: "stacking_runs_img"
+  
+  # 2) 前融合（影像 + 临床早期拼接）
+  img_clin_early:
+    enabled: true
+    fusion_type: "early"    # early: 每个影像分支都拼接临床特征
+    modalities:
+      - rad3d
+      - rad2p5d
+      # - dl3d
+      # - dl2p5d
+    save_subdir: "stacking_runs_img_clin_early"
+  
+  # 3) 后融合（影像分支 + 独立临床分支）
+  hybrid:
+    enabled: true
+    fusion_type: "late"     # late: 影像和临床作为独立分支
+    modalities:
+      - rad3d
+      - rad2p5d
+      # - dl3d
+      # - dl2p5d
+      - clinpath            # 独立临床分支
+    save_subdir: "stacking_runs_hybrid"
+
