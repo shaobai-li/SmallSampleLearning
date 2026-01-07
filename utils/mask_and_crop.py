@@ -65,7 +65,11 @@ if __name__ == "__main__":
         pad_z_after = max(0, z_max - img_z)
         
         if pad_x_before > 0 or pad_x_after > 0 or pad_y_before > 0 or pad_y_after > 0 or pad_z_before > 0 or pad_z_after > 0:
-            pad_width = ((pad_z_before, pad_z_after), (pad_y_before, pad_y_after), (pad_x_before, pad_x_after))
+            pad_width = (
+                (pad_x_before, pad_x_after),
+                (pad_y_before, pad_y_after),
+                (pad_z_before, pad_z_after),
+            )
             masked_image = np.pad(masked_image, pad_width, mode='constant', constant_values=0)
             x_min += pad_x_before
             x_max += pad_x_before
@@ -79,7 +83,9 @@ if __name__ == "__main__":
         filename = os.path.basename(args.image_nrrd)
         output_path = os.path.join(args.output_dir, filename)
         
-        nrrd.write(output_path, cropped_image, image_header)
+        out_header = dict(image_header)
+        out_header["sizes"] = np.array(cropped_image.shape, dtype=np.int64)
+        nrrd.write(output_path, cropped_image, out_header)
         print(f"Saved to: {output_path}")
         
     except Exception as e:
