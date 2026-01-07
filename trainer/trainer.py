@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 class Trainer:
     """
     Trainer 类：负责训练逻辑（step级别、epoch内逻辑、策略）
+    支持 3D 自编码器和 2.5D 切片插值两种模式
     """
 
     def __init__(
@@ -24,12 +25,19 @@ class Trainer:
         self.checkpoint_dir = checkpoint_dir
         self.save_interval = save_interval
 
-    def train_step(self, batch: torch.Tensor) -> float:
-        """单步训练"""
-        x = batch.to(self.device)
+    def train_step(self, batch) -> float:
+        """单步训练，支持 3D (tensor) 和 2.5D (dict) 两种格式"""
+        if isinstance(batch, dict):
+            # 2.5D: {"input": [B,2,H,W], "target": [B,1,H,W]}
+            x = batch["input"].to(self.device)
+            target = batch["target"].to(self.device)
+        else:
+            # 3D: [B,1,D,H,W] 自编码器
+            x = batch.to(self.device)
+            target = x
 
         recon = self.model(x)
-        loss = self.criterion(recon, x)
+        loss = self.criterion(recon, target)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -80,4 +88,3 @@ class Trainer:
             # 按间隔保存检查点
             if (epoch + 1) % self.save_interval == 0:
                 self.save_checkpoint(epoch + 1, avg_loss)
-

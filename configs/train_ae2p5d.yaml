@@ -4,7 +4,7 @@ data:
   bin_factor: 2
 
 model:
-  name: AE_3D  # 3D 自编码器（体积重建）
+  name: AE_2p5D  # 2.5D 自编码器（切片插值）
 
 training:
   batch_size: 4

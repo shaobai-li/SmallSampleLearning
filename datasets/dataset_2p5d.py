@@ -29,7 +29,7 @@ class Dataset2p5D(Dataset):
                 continue
 
             header = nrrd.read_header(nrrd_path)
-            depth = header["sizes"][0]  # [D, H, W]
+            depth = header["sizes"][2]
 
             for z in range(1, depth - 1):
                 samples.append((pid, z))
