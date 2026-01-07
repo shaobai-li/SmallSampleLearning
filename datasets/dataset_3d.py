@@ -1,14 +1,15 @@
 import os
 import pandas as pd
 import nrrd
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
+class Dataset3D(Dataset):
+    """3D Volume Dataset for Autoencoder"""
 
-class NRRDDataset(Dataset):
     def __init__(self, csv_path: str, nrrd_dir: str, bin_factor: int = 1):
-
         df = pd.read_csv(csv_path)
         self.patient_ids = df["patient_id"].tolist()
         self.nrrd_dir = nrrd_dir
@@ -29,7 +30,6 @@ class NRRDDataset(Dataset):
         if self.bin_factor > 1:
             tensor = tensor.unsqueeze(0)  # [1, 1, D, H, W]
             tensor = F.avg_pool3d(tensor, kernel_size=self.bin_factor)
-            tensor = tensor.squeeze(0)  # [1, D', H', W']
+            tensor = tensor.squeeze(0)    # [1, D', H', W']
 
         return tensor
-

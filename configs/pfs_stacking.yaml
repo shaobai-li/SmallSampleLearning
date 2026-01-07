@@ -65,8 +65,8 @@ experiments:
     modalities:
       - rad3d
       - rad2p5d
-      # - dl3d              # 取消注释启用
-      # - dl2p5d
+      - dl3d              # 取消注释启用
+      - dl2p5d
     save_subdir: "stacking_runs_img"
   
   # 2) 前融合（影像 + 临床早期拼接）
@@ -76,8 +76,8 @@ experiments:
     modalities:
       - rad3d
       - rad2p5d
-      # - dl3d
-      # - dl2p5d
+      - dl3d
+      - dl2p5d
     save_subdir: "stacking_runs_img_clin_early"
   
   # 3) 后融合（影像分支 + 独立临床分支）
@@ -87,8 +87,9 @@ experiments:
     modalities:
       - rad3d
       - rad2p5d
-      # - dl3d
-      # - dl2p5d
+      - dl3d
+      - dl2p5d
       - clinpath            # 独立临床分支
     save_subdir: "stacking_runs_hybrid"
 
+  

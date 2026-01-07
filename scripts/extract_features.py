@@ -5,7 +5,7 @@ import pandas as pd
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from datasets.dataset import NRRDDataset
+from datasets.dataset import Dataset3D
 from models.model import AE_3D
 
 
@@ -22,7 +22,7 @@ def extract_features(cfg):
     print(f"Loaded checkpoint: {cfg.model.checkpoint}")
 
     # Load dataset
-    dataset = NRRDDataset(
+    dataset = Dataset3D(
         cfg.data.csv_path,
         cfg.data.nrrd_dir,
         bin_factor=cfg.data.bin_factor,

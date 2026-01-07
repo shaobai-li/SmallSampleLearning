@@ -1,7 +1,7 @@
 data:
-  input_path: outputs/train_merged.csv
-  feature_prefix: "feature_"  # 特征前缀过滤，如 "feature_" 只筛选AE3D特征；留空则使用全部数值特征
+  input_path: outputs/train_merged.csv_" 只筛选AE3D特征；留空则使用全部数值特征
 
+  feature_prefix: "feature_"  # 特征前缀过滤，如 "feature
 output:
   path_PFS: outputs/select_features/feature_selection_all_PFS
   path_OS: outputs/select_features/feature_selection_all_OS

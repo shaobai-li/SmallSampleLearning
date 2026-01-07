@@ -3,8 +3,8 @@ import torch
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
-from datasets.dataset import NRRDDataset
-from models.model import AE_3D
+from datasets import Dataset3D
+from models import AE_3D
 from losses.loss import L1ReconstructionLoss
 from trainer.trainer import Trainer
 
@@ -15,7 +15,7 @@ def train(cfg):
     print(f"Using device: {device}")
 
     # Dataset & DataLoader
-    dataset = NRRDDataset(
+    dataset = Dataset3D(
         cfg.data.csv_path,
         cfg.data.nrrd_dir,
         bin_factor=cfg.data.bin_factor,
