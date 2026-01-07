@@ -12,28 +12,38 @@ class Dataset2p5D(Dataset):
     Input: [S(z-1), S(z+1)] → Target: S(z)
     """
 
-    def __init__(self, csv_path: str, nrrd_dir: str, bin_factor: int = 1):
+    def __init__(self, csv_path: str, nrrd_dir: str, bin_factor: int = 1, min_nonzero_frac: float = 0.0):
         df = pd.read_csv(csv_path)
         self.patient_ids = df["patient_id"].tolist()
         self.nrrd_dir = nrrd_dir
         self.bin_factor = bin_factor
-
-        # 构建所有有效的 (patient_id, z_index) 对
+        self.min_nonzero_frac = float(min_nonzero_frac)
         self.samples = self._build_samples()
 
     def _build_samples(self):
         samples = []
+        dropped = 0
+
         for pid in self.patient_ids:
             nrrd_path = os.path.join(self.nrrd_dir, f"{pid}.nrrd")
             if not os.path.exists(nrrd_path):
                 continue
 
-            header = nrrd.read_header(nrrd_path)
-            depth = header["sizes"][2]
+            data, _ = nrrd.read(nrrd_path)  # [D,H,W] 或 [H,W,D]（取决于你的数据）
+            # 统一按你的 Dataset 写法：data[z] 是一个 2D 切片
+            depth = data.shape[0]
 
             for z in range(1, depth - 1):
+                inp = np.stack([data[z - 1], data[z + 1]], axis=0)
+                nonzero_frac = np.mean(inp != 0)
+
+                if nonzero_frac <= self.min_nonzero_frac:
+                    dropped += 1
+                    continue
+
                 samples.append((pid, z))
 
+        print(f"[Dataset2p5D] built samples={len(samples)}, dropped={dropped}, min_nonzero_frac={self.min_nonzero_frac}")
         return samples
 
     def __len__(self):
