@@ -50,6 +50,7 @@ def train(cfg):
         device=device,
         checkpoint_dir=cfg.checkpoint.dir,
         save_interval=cfg.checkpoint.save_interval,
+        model_name=model_name,
     )
 
     # 启动训练

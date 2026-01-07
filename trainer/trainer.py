@@ -17,7 +17,7 @@ class Trainer:
         device: torch.device,
         checkpoint_dir: str = "checkpoints",
         save_interval: int = 10,
-        model_name: str = "model",
+        model_name: str = "AE_3D",
     ):
         self.model = model
         self.criterion = criterion
