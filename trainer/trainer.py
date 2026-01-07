@@ -17,6 +17,7 @@ class Trainer:
         device: torch.device,
         checkpoint_dir: str = "checkpoints",
         save_interval: int = 10,
+        model_name: str = "model",
     ):
         self.model = model
         self.criterion = criterion
@@ -24,17 +25,20 @@ class Trainer:
         self.device = device
         self.checkpoint_dir = checkpoint_dir
         self.save_interval = save_interval
+        self.model_name = model_name
 
     def train_step(self, batch) -> float:
         """单步训练，支持 3D (tensor) 和 2.5D (dict) 两种格式"""
-        if isinstance(batch, dict):
+        if self.model_name == "AE_2p5D":
             # 2.5D: {"input": [B,2,H,W], "target": [B,1,H,W]}
             x = batch["input"].to(self.device)
             target = batch["target"].to(self.device)
-        else:
+        elif self.model_name == "AE_3D":
             # 3D: [B,1,D,H,W] 自编码器
             x = batch.to(self.device)
             target = x
+        else:
+            raise ValueError(f"Unsupported model: {self.model_name}")
 
         recon = self.model(x)
         loss = self.criterion(recon, target)
@@ -68,7 +72,7 @@ class Trainer:
     def save_checkpoint(self, epoch: int, loss: float):
         """保存检查点"""
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        ckpt_path = os.path.join(self.checkpoint_dir, f"ae3d_epoch{epoch}.pt")
+        ckpt_path = os.path.join(self.checkpoint_dir, f"{self.model_name}_epoch{epoch}.pt")
         torch.save(
             {
                 "epoch": epoch,
