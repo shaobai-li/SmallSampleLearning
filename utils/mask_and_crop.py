@@ -55,7 +55,7 @@ if __name__ == "__main__":
         z_min = int(np.floor(center_z - half_z))
         z_max = int(np.ceil(center_z + half_z))
         
-        img_z, img_y, img_x = image.shape
+        img_x, img_y, img_z = image.shape
         
         pad_x_before = max(0, -x_min)
         pad_x_after = max(0, x_max - img_x)
@@ -74,7 +74,7 @@ if __name__ == "__main__":
             z_min += pad_z_before
             z_max += pad_z_before
         
-        cropped_image = masked_image[z_min:z_max, y_min:y_max, x_min:x_max]
+        cropped_image = masked_image[x_min:x_max, y_min:y_max, z_min:z_max]
         
         filename = os.path.basename(args.image_nrrd)
         output_path = os.path.join(args.output_dir, filename)
