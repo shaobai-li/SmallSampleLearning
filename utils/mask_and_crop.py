@@ -48,12 +48,12 @@ if __name__ == "__main__":
         half_y = bbox_y / 2.0
         half_z = bbox_z / 2.0
         
-        x_min = int(np.floor(center_x - half_x))
-        x_max = int(np.ceil(center_x + half_x))
-        y_min = int(np.floor(center_y - half_y))
-        y_max = int(np.ceil(center_y + half_y))
-        z_min = int(np.floor(center_z - half_z))
-        z_max = int(np.ceil(center_z + half_z))
+        x_min = int(round(center_x - half_x))
+        x_max = x_min + bbox_x
+        y_min = int(round(center_y - half_y))
+        y_max = y_min + bbox_y
+        z_min = int(round(center_z - half_z))
+        z_max = z_min + bbox_z
         
         img_x, img_y, img_z = image.shape
         
