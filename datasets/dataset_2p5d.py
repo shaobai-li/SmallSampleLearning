@@ -76,6 +76,8 @@ class Dataset2p5D(Dataset):
             ).squeeze(0)
 
         return {
+            "patient_id": pid,
+            "z": int(z),
             "input": input_slices,
             "target": target_slice,
         }

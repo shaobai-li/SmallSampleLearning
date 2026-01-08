@@ -1,0 +1,17 @@
+data:
+  csv_path: data/val_ssl.csv
+  nrrd_dir: /data/res/res3d/inbox/02_masked/
+  bin_factor: 2
+
+model:
+  name: AE_2p5D
+  checkpoint: checkpoints/ae2p5d_epoch50.pt
+
+extract:
+  batch_size: 64
+  aggregate: mean
+
+output:
+  path: outputs/features/val_features_2p5d.csv
+
+
