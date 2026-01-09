@@ -5,7 +5,7 @@ data:
 
 model:
   name: AE_2p5D
-  checkpoint: checkpoints/ae2p5d_epoch50.pt
+  checkpoint: checkpoints/AE_2p5D_epoch50.pt
 
 extract:
   batch_size: 64
