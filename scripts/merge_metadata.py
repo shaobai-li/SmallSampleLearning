@@ -29,7 +29,8 @@ def merge_metadata(cfg):
         meta_df = meta_df.merge(feat_df, on="patient_id", how="inner")
         print(f"合并后: {meta_df.shape}")
 
-
+    meta_df.to_csv(cfg.output.path, index=False)
+    print(f"Saved merged metadata to: {cfg.output.path}")
 
 def main():
     parser = argparse.ArgumentParser(description="合并元数据与 AE3D 特征")
