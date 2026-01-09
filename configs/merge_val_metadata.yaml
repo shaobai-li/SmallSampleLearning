@@ -1,10 +1,13 @@
 data:
   metadata_path: data/original/val.csv       # 原始元数据 CSV
-  features_path: outputs/features/val_features.csv  # AE3D 特征 CSV
+  features_path: 
+    - outputs/features/val_features.csv  # AE3D 特征 CSV
+    - outputs/features/val_features_2p5d.csv  # AE2p5D 特征 CSV
 
 output:
   path: outputs/val_merged.csv
 
 merge:
-  old_prefix: "feature_"        # 旧特征前缀
-
+  old_prefix: 
+    - "feature_"
+    - "f"

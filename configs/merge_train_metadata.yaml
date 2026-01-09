@@ -10,4 +10,4 @@ output:
 merge:
   old_prefix: 
     - "feature_"
-    - "f_"
+    - "f"
