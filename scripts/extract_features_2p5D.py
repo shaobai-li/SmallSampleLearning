@@ -92,7 +92,7 @@ def extract_features_2p5d(cfg):
             features.append(patient_feat)
 
     # -------- save --------
-    feat_cols = [f"feature_{i}" for i in range(256)]
+    feat_cols = [f"f_{i}" for i in range(256)]
     out_df = pd.DataFrame(features, columns=feat_cols)
     out_df.insert(0, "patient_id", patient_ids)
 
