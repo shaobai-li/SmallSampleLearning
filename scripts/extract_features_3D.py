@@ -5,8 +5,8 @@ import pandas as pd
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
-from datasets.dataset import Dataset3D
-from models.model import AE_3D
+from datasets import Dataset3D
+from models import AE_3D
 
 
 def extract_features(cfg):
